@@ -9,7 +9,7 @@
 
 const QColor FrameInfoWindow::byteGraphColors[8] = {Qt::blue, Qt::green,  Qt::black, Qt::red, //0 1 2 3
                                                     Qt::gray, Qt::darkYellow, Qt::cyan,  Qt::darkMagenta}; //4 5 6 7
-QPen FrameInfoWindow::bytePens[8];
+QVector<QPen> FrameInfoWindow::bytePens;
 
 const int numIntervalHistBars = 20;
 
@@ -37,13 +37,6 @@ FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *paren
     ui->splitter->setStretchFactor(0, 1); //idx, stretch factor
     ui->splitter->setStretchFactor(1, 4); //goal is to make right hand side larger by default
 
-    for (int i = 0; i < 8; i++)
-    {
-        graphByte[i] = new QCustomPlot();
-        setupByteGraph(graphByte[i], i);
-        ui->gridLower->addWidget(graphByte[i], i / 4, i & 3);
-    }
-
     ui->gridUpper->addWidget(new QLabel("Heatmap"), 0, 0);
     heatmap = new CANDataGrid();
     heatmap->setMode(GridMode::HEAT_VIEW);
@@ -64,11 +57,9 @@ FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *paren
     graphHistogram->yAxis->setRange(0, 100);
     QSharedPointer<QCPAxisTickerLog> graphHistoLogTicker(new QCPAxisTickerLog);
     graphHistogram->yAxis->setTicker(graphHistoLogTicker);
-    //graphHistogram->yAxis2->setTicker(graphHistoLogTicker);
     graphHistogram->yAxis->setNumberFormat("eb"); // e = exponential, b = beautiful decimal powers
     graphHistogram->yAxis->setNumberPrecision(0); //log ticker always picks powers of 10 so no need or use for precision
 
-    //graphHistogram->axisRect()->setupFullAxesBox();
     graphHistogram->setBufferDevicePixelRatio(1);
 
     graphHistogram->xAxis->setLabel("Bits");
@@ -83,11 +74,9 @@ FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *paren
     ui->timeHistogram->yAxis->setRange(0, 100);
     QSharedPointer<QCPAxisTickerLog> logTicker(new QCPAxisTickerLog);
     ui->timeHistogram->yAxis->setTicker(logTicker);
-    //ui->timeHistogram->yAxis2->setTicker(logTicker);
     ui->timeHistogram->yAxis->setScaleType(QCPAxis::stLogarithmic);
     ui->timeHistogram->yAxis->setNumberFormat("eb"); // e = exponential, b = beautiful decimal powers
     ui->timeHistogram->yAxis->setNumberPrecision(0); //log ticker always picks powers of 10 so no need or use for precision
-    //ui->timeHistogram->axisRect()->setupFullAxesBox();
 
     ui->timeHistogram->xAxis->setLabel("Interval (ms)");
     ui->timeHistogram->yAxis->setLabel("Occurrences");
@@ -117,8 +106,10 @@ FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *paren
 
     for (int i = 0; i < 8; i++)
     {
-        bytePens[i].setColor(byteGraphColors[i]);
-        bytePens[i].setWidth(1);
+        QPen pen;
+        pen.setColor(byteGraphColors[i]);
+        pen.setWidth(1);
+        bytePens.append(pen);
     }
 
     connect(graphHistogram, SIGNAL(mousePress(QMouseEvent*)), this, SLOT(mousePress()));
@@ -141,11 +132,8 @@ void FrameInfoWindow::setupByteGraph(QCustomPlot *plot, int num)
         QSharedPointer<QCPAxisTickerHex> hexTicker(new QCPAxisTickerHex);
         plot->yAxis->setTicker(hexTicker);
     }
-    //plot->axisRect()->setupFullAxesBox();
 
     plot->xAxis->setLabel("Time [" + QString::number(num) + "]");
-    //if (useHexTicker) plot->yAxis->setLabel("Value (HEX)");
-    //else plot->yAxis->setLabel("Value (Dec)");
     plot->yAxis->setLabel("");
 
     plot->legend->setVisible(false);
@@ -198,32 +186,29 @@ void FrameInfoWindow::mouseWheel()
         plot->axisRect()->setRangeZoom(Qt::Horizontal|Qt::Vertical);
 }
 
-
-//two modes here. If none of the 8 sub graphs are hidden then hide all except the one the user
-//just double clicked on. Otherwise unhide the 7 hidden ones
 void FrameInfoWindow::mouseDoubleClick()
 {
     QCustomPlot *plot = qobject_cast<QCustomPlot *>(sender());
     bool hideMode = true;
 
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < graphByte.size(); i++)
     {
-        if (ui->gridLower->itemAt(i)->widget()->isHidden()) hideMode = false;
+        if (graphByte[i]->isHidden()) hideMode = false;
     }
 
     if (hideMode)
     {
-    for (int i = 0; i < 8; i++)
+        for (int i = 0; i < graphByte.size(); i++)
         {
-            if (ui->gridLower->itemAt(i)->widget() == (plot)) qDebug() << "Idx " << i << " matched!";
-            else ui->gridLower->itemAt(i)->widget()->setHidden(true);
+            if (graphByte[i] == plot) qDebug() << "Idx " << i << " matched!";
+            else graphByte[i]->setHidden(true);
         }
     }
     else
     {
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < graphByte.size(); i++)
         {
-            ui->gridLower->itemAt(i)->widget()->setHidden(false);
+            graphByte[i]->setHidden(false);
         }
     }
 }
@@ -303,12 +288,10 @@ void FrameInfoWindow::writeSettings()
     }
 }
 
-//remember, negative numbers are special -1 = all frames deleted, -2 = totally new set of frames.
 void FrameInfoWindow::updatedFrames(int numFrames)
 {
     if (numFrames == -1) //all frames deleted. Kill the display
     {
-        //qDebug() << "Delete all frames in Info Window";
         ui->listFrameID->clear();
         ui->treeDetails->clear();
         foundID.clear();
@@ -316,7 +299,6 @@ void FrameInfoWindow::updatedFrames(int numFrames)
     }
     else if (numFrames == -2) //all new set of frames. Reset
     {
-        //qDebug() << "All new set of frames in Info Window";
         ui->listFrameID->clear();
         ui->treeDetails->clear();
         foundID.clear();
@@ -329,7 +311,6 @@ void FrameInfoWindow::updatedFrames(int numFrames)
     }
     else //just got some new frames. See if they are relevant.
     {
-        //qDebug() << "Got frames in Info Window";
         if (numFrames > modelFrames->count()) return;
 
         unsigned int currID = 0;
@@ -354,17 +335,11 @@ void FrameInfoWindow::updatedFrames(int numFrames)
         }
         if (thisID)
         {
-            //the problem here is that it'll blast us out of the details as soon as this
-            //happens. The only way to do this properly is to actually traverse
-            //the details structure and change the text. We don't do that yet.
-            //so, the line is commented out. If people need to see the updated
-            //data they can click another ID and back and it'll be OK
-
             //updateDetailsWindow(ui->listFrameID->currentItem()->text());
         }
         //default is to sort in ascending order
         ui->listFrameID->sortItems();
-        ui->lblUniqueID->setText(")" + QString::number(ui->listFrameID->count()) + tr(" unique ids)"));
+        ui->lblUniqueID->setText("(" + QString::number(ui->listFrameID->count()) + tr(" unique ids)"));
     }
 }
 
@@ -376,22 +351,20 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
     int64_t minInterval;
     int64_t maxInterval;
     int64_t thisInterval;
-    int minData[64];
-    int maxData[64];
-    int dataHistogram[256][64];
-    int bitfieldHistogram[64];
+    QVector<int> minData, maxData;
+    QVector<QVector<int>> dataHistogram;
+    QVector<int> bitfieldHistogram;
     QVector<double> histGraphX, histGraphY;
-    QVector<double> byteGraphX, byteGraphY[64];
     QVector<double> timeGraphX, timeGraphY;
     QHash<QString, QHash<QString, int>> signalInstances;
     double maxY = -1000.0;
-    uint8_t changedBits[8];
-    uint8_t referenceBits[8];
-    uint8_t heatVals[512];
+    QVector<uint8_t> changedBits;
+    QVector<uint8_t> referenceBits;
+    QVector<uint8_t> heatVals;
 
     //these two used by bitflip heatmap functionality
-    uint8_t refByte[8];
-    double bitFlipHeat[64];
+    QVector<uint8_t> refByte;
+    QVector<double> bitFlipHeat;
 
     QTreeWidgetItem *baseNode, *dataBase, *histBase, *tempItem;
 
@@ -405,7 +378,6 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
 
     if (targettedID > -1)
     {
-
         frameCache.clear();
         for (int i = 0; i < modelFrames->count(); i++)
         {
@@ -484,7 +456,6 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             tempItem = new QTreeWidgetItem();
             tempItem->setText(0, tr("   Sender Id: ") + Utility::formatNumber( (uint64_t)FilterUtility::getGMLanSenderId(targettedID)));
             baseNode->addChild(tempItem);
-
         }
 
         tempItem = new QTreeWidgetItem();
@@ -492,38 +463,38 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         baseNode->addChild(tempItem);
 
         //clear out all the counters and accumulators
-        minLen = 8;
+        minLen = 64;
         maxLen = 0;
         minInterval = 0x7FFFFFFF;
         maxInterval = 0;
-        for (int i = 0; i < 64; i++)
-        {
-            minData[i] = 256;
-            maxData[i] = -1;
-            for (int k = 0; k < 256; k++) dataHistogram[k][i] = 0;
-        }
-        for (int j = 0; j < 64; j++)
-        {
-            bitfieldHistogram[j] = 0;
-            bitFlipHeat[j] = 0;
-        }
+        minData.fill(256, 64);
+        maxData.fill(-1, 64);
+        dataHistogram.resize(256);
+        for (int i = 0; i < 256; i++) dataHistogram[i].fill(0, 64);
+        bitfieldHistogram.fill(0, 512);
+        bitFlipHeat.fill(0, 512);
         signalInstances.clear();
 
         data = reinterpret_cast<const unsigned char *>(frameCache.at(0).payload().constData());
         dataLen = frameCache.at(0).payload().length();
 
+        changedBits.fill(0, dataLen);
+        referenceBits.fill(0, dataLen);
+        refByte.fill(0, dataLen);
         for (int c = 0; c < dataLen; c++)
         {
-            changedBits[c] = 0;
             referenceBits[c] = data[c];
             refByte[c] = data[c];
-            //qDebug() << referenceBits[c];
         }
 
         std::vector<int64_t> sortedIntervals;
         int64_t intervalSum = 0;
 
         DBC_MESSAGE *msg = dbcHandler->findMessageForFilter(targettedID, nullptr);
+
+        QVector<double> byteGraphX;
+        QVector<QVector<double>> byteGraphY;
+        byteGraphY.resize(64);
 
         //then find all data points
         for (int j = 0; j < frameCache.count(); j++)
@@ -539,8 +510,6 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
 
             if (j != 0)
             {
-                //TODO - we try the interval whichever way doesn't go negative. But, we should probably sort the frame list before
-                //starting so that the intervals are all correct.
                 if (frameCache[j].timeStamp().microSeconds() > frameCache[j-1].timeStamp().microSeconds())
                     thisInterval = (frameCache[j].timeStamp().microSeconds() - frameCache[j-1].timeStamp().microSeconds());
                 else
@@ -606,7 +575,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         }
 
         //Divide all the bit flip heat values by the number of frames to get a ratio
-        for (int j = 0; j < 64; j++) bitFlipHeat[j] /= (double)frameCache.count();
+        for (int j = 0; j < 512; j++) bitFlipHeat[j] /= (double)frameCache.count();
 
         std::sort(sortedIntervals.begin(), sortedIntervals.end());
         int64_t intervalStdDiv = 0, intervalPctl5 = 0, intervalPctl95 = 0, intervalMean = 0, intervalVariance = 0;
@@ -733,7 +702,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         //heat map output
         dataBase = new QTreeWidgetItem();
         dataBase->setText(0, tr("Bitchange Heatmap"));
-        memset(heatVals, 0, 512); //always clear the array before populating it.
+        heatVals.fill(0, 512); //always clear the array before populating it.
         for (int c = 0; c < 8 * maxLen; c++)
         {
             tempItem = new QTreeWidgetItem();
@@ -746,7 +715,6 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             if (bitfieldHistogram[c] > maxY) maxY = bitfieldHistogram[c];
             uint8_t heat = bitFlipHeat[c] * 255;
             if ((heat < 1) && (bitFlipHeat[c] > 0.0001)) heat = 1; //make sure any little bit of heat causes at least some output
-            //qDebug() << "Heat for bit " << c <<  " is " << heat;
             heatVals[c] = heat;
         }
         baseNode->addChild(dataBase);
@@ -784,33 +752,46 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         graphHistogram->axisRect()->setupFullAxesBox();
         graphHistogram->replot();
 
+        // Clear existing graphs
+        for (auto plot : graphByte)
+        {
+            ui->gridLower->removeWidget(plot);
+            delete plot;
+        }
+        graphByte.clear();
+        graphRef.clear();
+
+        // Create new graphs
         for (int graphs = 0; graphs < maxLen && graphs < 64; graphs++)
         {
-            graphByte[graphs]->clearGraphs();
-            graphRef[graphs] = graphByte[graphs]->addGraph();
-            graphByte[graphs]->graph()->setData(byteGraphX, byteGraphY[graphs]);
-            graphByte[graphs]->graph()->setPen(bytePens[graphs % 8]); // Reuse colors if more than 8 bytes
-            graphByte[graphs]->xAxis->setRange(0, byteGraphX.count());
-            graphByte[graphs]->replot();
+            QCustomPlot* plot = new QCustomPlot();
+            setupByteGraph(plot, graphs);
+            ui->gridLower->addWidget(plot, graphs / 4, graphs % 4);
+            graphByte.append(plot);
+
+            plot->addGraph();
+            graphRef.append(plot->graph());
+            plot->graph()->setData(byteGraphX, byteGraphY[graphs]);
+            plot->graph()->setPen(bytePens[graphs % 8]); // Reuse colors if more than 8 bytes
+            plot->xAxis->setRange(0, byteGraphX.count());
+            plot->replot();
         }
 
         ui->timeHistogram->clearGraphs();
         ui->timeHistogram->addGraph();
         ui->timeHistogram->graph()->setData(timeGraphX, timeGraphY);
         ui->timeHistogram->graph()->setLineStyle(QCPGraph::lsStepLeft); //connect points with lines
-        //QBrush graphBrush;
         graphBrush.setColor(Qt::red);
         graphBrush.setStyle(Qt::SolidPattern);
         ui->timeHistogram->graph()->setPen(Qt::NoPen);
         ui->timeHistogram->graph()->setBrush(graphBrush);
-        //ui->timeHistogram->yAxis->setRange(0, maxTimeCounter * 1.1);
-        //ui->timeHistogram->xAxis->setRange(minInterval / 1000.0, maxInterval / 1000.0); //graph is in ms while intervals are in us
         ui->timeHistogram->axisRect()->setupFullAxesBox();
         ui->timeHistogram->rescaleAxes();
         ui->timeHistogram->replot();
     }
     else
     {
+        // Handle the case when targettedID is not valid
     }
 
     QSettings settings;
@@ -890,5 +871,3 @@ void FrameInfoWindow::dumpNode(QTreeWidgetItem* item, QFile *file, int indent)
     for( int i = 0; i < item->childCount(); ++i )
         dumpNode( item->child(i), file, indent + 1 );
 }
-
-
