@@ -376,12 +376,12 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
     int64_t minInterval;
     int64_t maxInterval;
     int64_t thisInterval;
-    int minData[8];
-    int maxData[8];
-    int dataHistogram[256][8];
+    int minData[64];
+    int maxData[64];
+    int dataHistogram[256][64];
     int bitfieldHistogram[64];
     QVector<double> histGraphX, histGraphY;
-    QVector<double> byteGraphX, byteGraphY[8];
+    QVector<double> byteGraphX, byteGraphY[64];
     QVector<double> timeGraphX, timeGraphY;
     QHash<QString, QHash<QString, int>> signalInstances;
     double maxY = -1000.0;
@@ -496,7 +496,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         maxLen = 0;
         minInterval = 0x7FFFFFFF;
         maxInterval = 0;
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < 64; i++)
         {
             minData[i] = 256;
             maxData[i] = -1;
@@ -532,7 +532,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             dataLen = frameCache.at(j).payload().length();
 
             byteGraphX.append(j);
-            for (int bytcnt = 0; bytcnt < dataLen; bytcnt++)
+            for (int bytcnt = 0; bytcnt < dataLen && bytcnt < 64; bytcnt++)
             {
                 byteGraphY[bytcnt].append(data[bytcnt]);
             }
@@ -784,12 +784,12 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
         graphHistogram->axisRect()->setupFullAxesBox();
         graphHistogram->replot();
 
-        for (int graphs = 0; graphs < 8; graphs++)
+        for (int graphs = 0; graphs < maxLen && graphs < 64; graphs++)
         {
             graphByte[graphs]->clearGraphs();
             graphRef[graphs] = graphByte[graphs]->addGraph();
             graphByte[graphs]->graph()->setData(byteGraphX, byteGraphY[graphs]);
-            graphByte[graphs]->graph()->setPen(bytePens[graphs]);
+            graphByte[graphs]->graph()->setPen(bytePens[graphs % 8]); // Reuse colors if more than 8 bytes
             graphByte[graphs]->xAxis->setRange(0, byteGraphX.count());
             graphByte[graphs]->replot();
         }
