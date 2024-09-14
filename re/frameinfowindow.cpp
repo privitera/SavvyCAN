@@ -9,8 +9,6 @@
 
 const QColor FrameInfoWindow::byteGraphColors[8] = {Qt::blue, Qt::green,  Qt::black, Qt::red, //0 1 2 3
                                                     Qt::gray, Qt::darkYellow, Qt::cyan,  Qt::darkMagenta}; //4 5 6 7
-QVector<QPen> FrameInfoWindow::bytePens;
-
 const int numIntervalHistBars = 20;
 
 FrameInfoWindow::FrameInfoWindow(const QVector<CANFrame> *frames, QWidget *parent) :
@@ -718,7 +716,7 @@ void FrameInfoWindow::updateDetailsWindow(QString newID)
             heatVals[c] = heat;
         }
         baseNode->addChild(dataBase);
-        heatmap->setHeat(heatVals);
+        heatmap->setHeat(heatVals.data());
 
         QHash<QString, QHash<QString, int>>::const_iterator it = signalInstances.constBegin();
         while (it != signalInstances.constEnd()) {
